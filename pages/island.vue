@@ -5,7 +5,7 @@ import * as dat from 'lil-gui';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 
-// Встроенные шейдеры для светлячков
+// Встроенные шейдеры для звезд
 const firefliesVertexShader = `
 uniform float uPixelRatio;
 uniform float uSize;
