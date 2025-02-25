@@ -1,8 +1,6 @@
 import postCssPxToRem from 'postcss-pxtorem';
 
 export default defineNuxtConfig({
-  target: 'static',
-
   modules: ['@vueuse/nuxt'],
 
   devtools: {
@@ -11,6 +9,8 @@ export default defineNuxtConfig({
   },
 
   css: ['~/assets/styles/main.less'],
+
+  target: 'static',
 
   vite: {
     plugins: [
@@ -21,15 +21,7 @@ export default defineNuxtConfig({
       postcss: {
         plugins: [
           postCssPxToRem({
-            propList: [
-              '*',
-              '!border-left',
-              '!border-right',
-              '!border-top',
-              '!border-bottom',
-              '!border',
-              '!outline',
-            ],
+            propList: ['*', '!border-left', '!border-right', '!border-top', '!border-bottom', '!border', '!outline'],
           }),
         ],
       },
