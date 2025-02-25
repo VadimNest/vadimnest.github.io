@@ -1,6 +1,8 @@
 import postCssPxToRem from 'postcss-pxtorem';
 
 export default defineNuxtConfig({
+  target: 'static',
+
   modules: ['@vueuse/nuxt'],
 
   devtools: {
