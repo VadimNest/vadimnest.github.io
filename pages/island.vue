@@ -286,4 +286,3 @@ const scene = ref<THREE.Scene | null>(null);
     @scene-ready="handleSceneReady"
   />
 </template>
-
