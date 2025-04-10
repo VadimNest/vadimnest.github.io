@@ -25,12 +25,16 @@ const projects = [
     component: 'space-fly',
   },
   {
-    name: '07 - Модель из частиц',
+    name: '07 - Модель дракона из частиц',
     component: 'particles-model',
   },
   {
     name: '08 - Модель tesla',
     component: 'tesla',
+  },
+  {
+    name: '09 - Процедурно сгенерированное солнце',
+    component: 'sun',
   },
 ];
 </script>
