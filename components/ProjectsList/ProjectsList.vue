@@ -36,6 +36,10 @@ const projects = [
     name: '09 - Процедурно сгенерированное солнце',
     component: 'sun',
   },
+  {
+    name: '10 - Нейронка',
+    component: 'lines',
+  },
 ];
 </script>
 

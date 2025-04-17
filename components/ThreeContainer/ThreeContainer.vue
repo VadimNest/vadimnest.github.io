@@ -1,10 +1,5 @@
 <script setup lang="ts">
-import {
-  SRGBColorSpace,
-  PerspectiveCamera,
-  Scene,
-  WebGLRenderer, Clock,
-} from 'three';
+import { SRGBColorSpace, PerspectiveCamera, Scene, WebGLRenderer, Clock } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { useElementBounding } from '@vueuse/core';
 import type { IThreeContext } from '~/types/three';
@@ -21,14 +16,14 @@ const {
   customAnimation = false,
   alpha = false,
 } = defineProps<{
-  clearColor?: string | number,
-  fov?: number,
-  near?: number,
-  far?: number,
-  cameraPosition?: [number, number, number],
-  enableDamping?: boolean,
-  customAnimation?: boolean,
-  alpha?: boolean,
+  clearColor?: string | number;
+  fov?: number;
+  near?: number;
+  far?: number;
+  cameraPosition?: [number, number, number];
+  enableDamping?: boolean;
+  customAnimation?: boolean;
+  alpha?: boolean;
 }>();
 const threeContainer = ref<HTMLDivElement>();
 const threeCanvas = ref<HTMLCanvasElement>();
@@ -38,7 +33,7 @@ const aspect = computed(() => width.value / height.value);
 let threeCtx: IThreeContext | null = null;
 
 const emit = defineEmits<{
-  'scene-ready': [context: IThreeContext]
+  'scene-ready': [context: IThreeContext];
 }>();
 
 const handleResize = () => {
@@ -78,12 +73,7 @@ const initThree = () => {
 
   const scene = new Scene();
 
-  const camera = new PerspectiveCamera(
-    fov,
-    aspect.value,
-    near,
-    far,
-  );
+  const camera = new PerspectiveCamera(fov, aspect.value, near, far);
   camera.position.set(...cameraPosition);
 
   const renderer = new WebGLRenderer({

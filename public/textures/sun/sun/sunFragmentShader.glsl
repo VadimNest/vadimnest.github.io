@@ -7,7 +7,6 @@ varying vec2 vUv;
 varying vec3 vPosition;
 float PI = 3.14159265358979323846;
 
-//
 // Description : Array and textureless GLSL 2D/3D/4D simplex
 //               noise functions.
 //      Author : Ian McEwan, Ashima Arts.
@@ -134,7 +133,6 @@ float snoise(vec4 v)
   m1 = m1 * m1;
   return 49.0 * ( dot(m0*m0, vec3( dot( p0, x0 ), dot( p1, x1 ), dot( p2, x2 )))
                + dot(m1*m1, vec2( dot( p3, x3 ), dot( p4, x4 ) ) ) ) ;
-
   }
 
 float fbm(vec4 p) {
@@ -161,7 +159,5 @@ void main() {
 
   gl_FragColor = vec4(noisy);
   gl_FragColor *= mix(1.0, spots, 0.7);
-
-
 }
 
