@@ -13,7 +13,7 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
     try {
       scene.background = new THREE.Color(0x0a0a2a);
 
-      const numPoints = 100;
+      const numPoints = 200;
       const positions: number[] = [];
       const initialPositions: number[] = [];
       const noiseOffsets: { x: number; y: number; z: number }[] = [];
@@ -36,6 +36,7 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
 
       const linesGeometry = new THREE.BufferGeometry();
       const linePositions: number[] = [];
+      const lineLengths: number[] = [];
       const lineStartDistances: number[] = [];
       const lineEndDistances: number[] = [];
       const lineTValues: number[] = [];
@@ -94,6 +95,11 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
         const idx2 = edge.j;
         linePositions.push(positions[idx1 * 3], positions[idx1 * 3 + 1], positions[idx1 * 3 + 2]);
         linePositions.push(positions[idx2 * 3], positions[idx2 * 3 + 1], positions[idx2 * 3 + 2]);
+        const dx = positions[idx1 * 3] - positions[idx2 * 3];
+        const dy = positions[idx1 * 3 + 1] - positions[idx2 * 3 + 1];
+        const dz = positions[idx1 * 3 + 2] - positions[idx2 * 3 + 2];
+        const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        lineLengths.push(length, length);
         lineTValues.push(0.0, 1.0);
         linePulseFlags.push(0.0, 0.0);
         lineIndices.push(idx1, idx2);
@@ -122,6 +128,11 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
             connectedPairs.add(pairKey);
             linePositions.push(positions[idx1 * 3], positions[idx1 * 3 + 1], positions[idx1 * 3 + 2]);
             linePositions.push(positions[idx2 * 3], positions[idx2 * 3 + 1], positions[idx2 * 3 + 2]);
+            const dx = positions[idx1 * 3] - positions[idx2 * 3];
+            const dy = positions[idx1 * 3 + 1] - positions[idx2 * 3 + 1];
+            const dz = positions[idx1 * 3 + 2] - positions[idx2 * 3 + 2];
+            const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            lineLengths.push(length, length);
             lineTValues.push(0.0, 1.0);
             linePulseFlags.push(0.0, 0.0);
             lineIndices.push(idx1, idx2);
@@ -132,8 +143,8 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
       }
 
       console.log('Total number of lines:', lineIndices.length / 2);
+      console.log('Sample line lengths:', lineLengths.slice(0, 10));
 
-      // Function to compute distances and update line attributes
       const updateDistancesAndAttributes = (sourceIndex: number) => {
         const distances: number[] = Array(numPoints).fill(Infinity);
         distances[sourceIndex] = 0;
@@ -186,10 +197,10 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
         return { distances, maxDistance: Math.max(...distances.filter((d) => d !== Infinity)) };
       };
 
-      // Initial distance computation
       let { distances, maxDistance } = updateDistancesAndAttributes(0);
 
       linesGeometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+      linesGeometry.setAttribute('lineLength', new THREE.Float32BufferAttribute(lineLengths, 1));
       linesGeometry.setAttribute('pulseFlag', new THREE.Float32BufferAttribute(linePulseFlags, 1));
 
       const vertexShader = `
@@ -197,16 +208,19 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
         varying float vLineT;
         varying float vStartDistance;
         varying float vEndDistance;
+        varying float vLineLength;
         varying float vPulseFlag;
         attribute float lineT;
         attribute float startDistance;
         attribute float endDistance;
+        attribute float lineLength;
         attribute float pulseFlag;
         void main() {
           vPosition = position;
           vLineT = lineT;
           vStartDistance = startDistance;
           vEndDistance = endDistance;
+          vLineLength = lineLength;
           vPulseFlag = pulseFlag;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
           gl_PointSize = 8.0;
@@ -228,10 +242,13 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
         uniform vec3 color;
         uniform float opacity;
         uniform float pulseTime;
+        uniform float pulseSpeed;
+        uniform float distanceScale;
         varying vec3 vPosition;
         varying float vLineT;
         varying float vStartDistance;
         varying float vEndDistance;
+        varying float vLineLength;
         varying float vPulseFlag;
         void main() {
           if (vStartDistance > 10000.0 || vEndDistance > 10000.0) {
@@ -241,12 +258,14 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
           vec3 baseColor = color;
           float baseOpacity = opacity;
           float highlight = 0.0;
-          float effectiveEndDistance = max(vEndDistance, vStartDistance + 0.5);
-          if (vPulseFlag < 0.5 && pulseTime >= vStartDistance && pulseTime <= effectiveEndDistance) {
-            float t = (pulseTime - vStartDistance) / max(effectiveEndDistance - vStartDistance, 0.001);
+          float pulseDuration = max(vLineLength / pulseSpeed, 0.01);
+          float startTime = vStartDistance * distanceScale;
+          float endTime = startTime + pulseDuration;
+          if (vPulseFlag < 0.5 && pulseTime >= startTime && pulseTime <= endTime) {
+            float t = (pulseTime - startTime) / pulseDuration;
             float dist = abs(vLineT - t);
-            if (dist < 0.3) {
-              highlight = 2.0 * exp(-pow(dist * 10.0, 2.0));
+            if (dist < 0.2) {
+              highlight = 2.0 * exp(-pow(dist * 15.0, 2.0));
               highlight = min(highlight, 1.0);
             }
           }
@@ -272,6 +291,8 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
           color: { value: new THREE.Color(0xffffff) },
           opacity: { value: 0.3 },
           pulseTime: { value: 0.0 },
+          pulseSpeed: { value: 20.0 },
+          distanceScale: { value: 0.5 },
         },
         vertexShader,
         fragmentShader: linesFragmentShader,
@@ -298,7 +319,8 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
       };
       window.addEventListener('resize', onWindowResize);
 
-      let resetInterval = maxDistance + 5.0;
+      let maxPulseDuration = Math.max(...lineLengths) / linesMaterial.uniforms.pulseSpeed.value;
+      let resetInterval = maxDistance * linesMaterial.uniforms.distanceScale.value + maxPulseDuration + 2.0;
       let pulseTime = 0.0;
       let lastElapsedTime = 0.0;
 
@@ -337,19 +359,26 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
             linePositionsArray[lineIdx + 5] = positionsArray[idx2 + 2];
 
             const startDistance = lineStartDistances[i * 2];
-            const effectiveEndDistance = Math.max(lineEndDistances[i * 2], startDistance + 0.5);
-            if (pulseTime > effectiveEndDistance && pulseFlagsArray[i * 2] < 0.5) {
+            const lineLength = lineLengths[i * 2];
+            const pulseDuration = Math.max(lineLength / linesMaterial.uniforms.pulseSpeed.value, 0.01);
+            const startTime = startDistance * linesMaterial.uniforms.distanceScale.value;
+            const endTime = startTime + pulseDuration;
+            if (pulseTime > endTime && pulseFlagsArray[i * 2] < 0.5) {
               pulseFlagsArray[i * 2] = 1.0;
               pulseFlagsArray[i * 2 + 1] = 1.0;
               console.log(
-                `Line ${i} pulsed: start=${startDistance}, end=${effectiveEndDistance}, pulseTime=${pulseTime}`,
+                `Line ${i} pulsed: startTime=${startTime.toFixed(3)}, endTime=${endTime.toFixed(
+                  3,
+                )}, length=${lineLength.toFixed(3)}, duration=${pulseDuration.toFixed(
+                  3,
+                )}, pulseTime=${pulseTime.toFixed(3)}`,
               );
             }
           }
           linesGeometry.attributes.position.needsUpdate = true;
           linesGeometry.attributes.pulseFlag.needsUpdate = true;
 
-          pulseTime += computedDeltaTime * 3.0;
+          pulseTime += computedDeltaTime;
           if (pulseTime > resetInterval) {
             pulseTime = 0.0;
             const newSourceIndex = Math.floor(Math.random() * numPoints);
@@ -357,7 +386,8 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
             const result = updateDistancesAndAttributes(newSourceIndex);
             distances = result.distances;
             maxDistance = result.maxDistance;
-            resetInterval = maxDistance + 5.0;
+            maxPulseDuration = Math.max(...lineLengths) / linesMaterial.uniforms.pulseSpeed.value;
+            resetInterval = maxDistance * linesMaterial.uniforms.distanceScale.value + maxPulseDuration + 2.0;
             for (let i = 0; i < pulseFlagsArray.length; i++) {
               pulseFlagsArray[i] = 0.0;
             }
