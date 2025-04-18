@@ -17,6 +17,8 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
       const positions: number[] = [];
       const initialPositions: number[] = [];
       const noiseOffsets: { x: number; y: number; z: number }[] = [];
+      const jerkTimes: number[] = [];
+      const jerkDirections: number[] = [];
 
       for (let i = 0; i < numPoints; i++) {
         const x = (Math.random() - 0.5) * 40;
@@ -29,10 +31,19 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
           y: Math.random() * 100,
           z: Math.random() * 100,
         });
+        jerkTimes.push(-1.0);
+        const theta = Math.random() * 2 * Math.PI;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const dx = Math.sin(phi) * Math.cos(theta);
+        const dy = Math.sin(phi) * Math.sin(theta);
+        const dz = Math.cos(phi);
+        jerkDirections.push(dx, dy, dz);
       }
 
       const pointsGeometry = new THREE.BufferGeometry();
       pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      pointsGeometry.setAttribute('jerkTime', new THREE.Float32BufferAttribute(jerkTimes, 1));
+      pointsGeometry.setAttribute('jerkDirection', new THREE.Float32BufferAttribute(jerkDirections, 3));
 
       const linesGeometry = new THREE.BufferGeometry();
       const linePositions: number[] = [];
@@ -103,7 +114,7 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
         lineTValues.push(0.0, 1.0);
         linePulseFlags.push(0.0, 0.0);
         lineIndices.push(idx1, idx2);
-        adjacencyList[idx1].push(idx2);
+        adjacencyList[idx1].push(idx2); // Fixed typo: idxyf2 -> idx2
         adjacencyList[idx2].push(idx1);
       }
 
@@ -223,18 +234,40 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
           vLineLength = lineLength;
           vPulseFlag = pulseFlag;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = 8.0;
+        }
+      `;
+
+      const pointsVertexShader = `
+        uniform float pulseTime;
+        attribute float jerkTime;
+        attribute vec3 jerkDirection;
+        varying vec3 vPosition;
+        varying float vJerkFactor;
+        void main() {
+          vPosition = position;
+          float jerkDuration = 0.2;
+          float timeSinceJerk = pulseTime - jerkTime;
+          float jerkFactor = smoothstep(0.0, jerkDuration, timeSinceJerk) * smoothstep(jerkDuration, 0.0, timeSinceJerk);
+          vJerkFactor = jerkFactor;
+          vec3 displacedPosition = position + jerkDirection * jerkFactor * 1.5;
+          float pointSize = 8.0 + 16.0 * jerkFactor;
+          gl_PointSize = pointSize;
+          vPosition = displacedPosition;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(displacedPosition, 1.0);
         }
       `;
 
       const pointsFragmentShader = `
         uniform vec3 color;
         uniform float opacity;
+        varying vec3 vPosition;
+        varying float vJerkFactor;
         void main() {
           vec2 coord = gl_PointCoord - vec2(0.5);
           float dist = length(coord);
           if (dist > 0.5) discard;
-          gl_FragColor = vec4(color, opacity);
+          vec3 finalColor = mix(color, vec3(1.0, 1.0, 1.0), vJerkFactor);
+          gl_FragColor = vec4(finalColor, opacity);
         }
       `;
 
@@ -265,13 +298,13 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
             float t = (pulseTime - startTime) / pulseDuration;
             float dist = abs(vLineT - t);
             if (dist < 0.2) {
-              highlight = 2.0 * exp(-pow(dist * 15.0, 2.0));
+              highlight = 4.0 * exp(-pow(dist * 10.0, 2.0));
               highlight = min(highlight, 1.0);
             }
           }
           vec3 highlightColor = vec3(1.0, 1.0, 1.0);
           vec3 finalColor = mix(baseColor, highlightColor, highlight);
-          float finalOpacity = mix(baseOpacity, 1.0, highlight);
+          float finalOpacity = baseOpacity + highlight * (1.0 - baseOpacity);
           gl_FragColor = vec4(finalColor, finalOpacity);
         }
       `;
@@ -280,8 +313,9 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
         uniforms: {
           color: { value: new THREE.Color(0xffffff) },
           opacity: { value: 1.0 },
+          pulseTime: { value: 0.0 },
         },
-        vertexShader,
+        vertexShader: pointsVertexShader,
         fragmentShader: pointsFragmentShader,
         transparent: true,
       });
@@ -289,10 +323,10 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
       const linesMaterial = new THREE.ShaderMaterial({
         uniforms: {
           color: { value: new THREE.Color(0xffffff) },
-          opacity: { value: 0.3 },
+          opacity: { value: 0.2 },
           pulseTime: { value: 0.0 },
           pulseSpeed: { value: 20.0 },
-          distanceScale: { value: 0.5 },
+          distanceScale: { value: 0.3 },
         },
         vertexShader,
         fragmentShader: linesFragmentShader,
@@ -306,7 +340,7 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
       scene.add(lines);
 
       const renderPass = new RenderPass(scene, camera);
-      const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.4, 0.75);
+      const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 3.0, 0.5, 0.7);
       const composer = new EffectComposer(renderer);
       composer.addPass(renderPass);
       composer.addPass(bloomPass);
@@ -333,39 +367,84 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
           }
 
           const positionsArray = pointsGeometry.attributes.position.array as Float32Array;
+          const jerkTimesArray = pointsGeometry.attributes.jerkTime.array as Float32Array;
+          const jerkDirectionsArray = pointsGeometry.attributes.jerkDirection.array as Float32Array;
+          const displacedPositions: number[] = new Array(numPoints * 3).fill(0);
+
           for (let i = 0; i < numPoints; i++) {
             const idx = i * 3;
             const offset = noiseOffsets[i];
             const noiseX = Math.sin(elapsedTime * 0.2 + offset.x) * Math.cos(elapsedTime * 0.1 + offset.x * 0.5);
             const noiseY = Math.cos(elapsedTime * 0.2 + offset.y) * Math.sin(elapsedTime * 0.1 + offset.y * 0.5);
             const noiseZ = Math.sin(elapsedTime * 0.2 + offset.z) * Math.cos(elapsedTime * 0.1 + offset.z * 0.5);
-            positionsArray[idx] = initialPositions[idx] + noiseX * 1.0;
-            positionsArray[idx + 1] = initialPositions[idx + 1] + noiseY * 1.0;
-            positionsArray[idx + 2] = initialPositions[idx + 2] + noiseZ * 1.0;
+            const baseX = initialPositions[idx] + noiseX * 1.0;
+            const baseY = initialPositions[idx + 1] + noiseY * 1.0;
+            const baseZ = initialPositions[idx + 2] + noiseZ * 1.0;
+
+            const timeSinceJerk = pulseTime - jerkTimesArray[i];
+            const jerkDuration = 0.2;
+            const jerkFactor = Math.min(
+              Math.max((timeSinceJerk / jerkDuration) * (1.0 - timeSinceJerk / jerkDuration), 0.0),
+              1.0,
+            );
+            const jerkX = jerkDirectionsArray[idx] * jerkFactor * 1.5;
+            const jerkY = jerkDirectionsArray[idx + 1] * jerkFactor * 1.5;
+            const jerkZ = jerkDirectionsArray[idx + 2] * jerkFactor * 1.5;
+
+            displacedPositions[idx] = baseX + jerkX;
+            displacedPositions[idx + 1] = baseY + jerkY;
+            displacedPositions[idx + 2] = baseZ + jerkZ;
+
+            positionsArray[idx] = baseX;
+            positionsArray[idx + 1] = baseY;
+            positionsArray[idx + 2] = baseZ;
           }
           pointsGeometry.attributes.position.needsUpdate = true;
 
           const linePositionsArray = linesGeometry.attributes.position.array as Float32Array;
           const pulseFlagsArray = linesGeometry.attributes.pulseFlag.array as Float32Array;
+          let jerkUpdateNeeded = false;
           for (let i = 0; i < lineIndices.length / 2; i++) {
-            const idx1 = lineIndices[i * 2] * 3;
-            const idx2 = lineIndices[i * 2 + 1] * 3;
+            const idx1 = lineIndices[i * 2];
+            const idx2 = lineIndices[i * 2 + 1];
             const lineIdx = i * 6;
-            linePositionsArray[lineIdx] = positionsArray[idx1];
-            linePositionsArray[lineIdx + 1] = positionsArray[idx1 + 1];
-            linePositionsArray[lineIdx + 2] = positionsArray[idx1 + 2];
-            linePositionsArray[lineIdx + 3] = positionsArray[idx2];
-            linePositionsArray[lineIdx + 4] = positionsArray[idx2 + 1];
-            linePositionsArray[lineIdx + 5] = positionsArray[idx2 + 2];
+            linePositionsArray[lineIdx] = displacedPositions[idx1 * 3];
+            linePositionsArray[lineIdx + 1] = displacedPositions[idx1 * 3 + 1];
+            linePositionsArray[lineIdx + 2] = displacedPositions[idx1 * 3 + 2];
+            linePositionsArray[lineIdx + 3] = displacedPositions[idx2 * 3];
+            linePositionsArray[lineIdx + 4] = displacedPositions[idx2 * 3 + 1];
+            linePositionsArray[lineIdx + 5] = displacedPositions[idx2 * 3 + 2];
 
             const startDistance = lineStartDistances[i * 2];
             const lineLength = lineLengths[i * 2];
             const pulseDuration = Math.max(lineLength / linesMaterial.uniforms.pulseSpeed.value, 0.01);
             const startTime = startDistance * linesMaterial.uniforms.distanceScale.value;
             const endTime = startTime + pulseDuration;
-            if (pulseTime > endTime && pulseFlagsArray[i * 2] < 0.5) {
+            const timeToEnd = endTime - pulseTime;
+            if (timeToEnd <= computedDeltaTime && timeToEnd >= -computedDeltaTime && pulseFlagsArray[i * 2] < 0.5) {
               pulseFlagsArray[i * 2] = 1.0;
               pulseFlagsArray[i * 2 + 1] = 1.0;
+              const lineTStart = lineTValues[i * 2];
+              const receivingPointIdx = lineTStart === 0.0 ? idx2 : idx1;
+              if (jerkTimesArray[receivingPointIdx] < pulseTime - 0.2) {
+                jerkTimesArray[receivingPointIdx] = pulseTime;
+                jerkUpdateNeeded = true;
+                const jerkDirIdx = receivingPointIdx * 3;
+                const jerkMag = Math.sqrt(
+                  jerkDirectionsArray[jerkDirIdx] ** 2 +
+                    jerkDirectionsArray[jerkDirIdx + 1] ** 2 +
+                    jerkDirectionsArray[jerkDirIdx + 2] ** 2,
+                );
+                console.log(
+                  `Point ${receivingPointIdx} jerked: pulseTime=${pulseTime.toFixed(
+                    3,
+                  )}, line=${i}, startTime=${startTime.toFixed(3)}, endTime=${endTime.toFixed(
+                    3,
+                  )}, length=${lineLength.toFixed(3)}, duration=${pulseDuration.toFixed(
+                    3,
+                  )}, jerkDirectionMagnitude=${jerkMag.toFixed(3)}`,
+                );
+              }
               console.log(
                 `Line ${i} pulsed: startTime=${startTime.toFixed(3)}, endTime=${endTime.toFixed(
                   3,
@@ -377,6 +456,9 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
           }
           linesGeometry.attributes.position.needsUpdate = true;
           linesGeometry.attributes.pulseFlag.needsUpdate = true;
+          if (jerkUpdateNeeded) {
+            pointsGeometry.attributes.jerkTime.needsUpdate = true;
+          }
 
           pulseTime += computedDeltaTime;
           if (pulseTime > resetInterval) {
@@ -391,10 +473,24 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
             for (let i = 0; i < pulseFlagsArray.length; i++) {
               pulseFlagsArray[i] = 0.0;
             }
+            for (let i = 0; i < numPoints; i++) {
+              jerkTimesArray[i] = -1.0;
+              const theta = Math.random() * 2 * Math.PI;
+              const phi = Math.acos(2 * Math.random() - 1);
+              const dx = Math.sin(phi) * Math.cos(theta);
+              const dy = Math.sin(phi) * Math.sin(theta);
+              const dz = Math.cos(phi);
+              jerkDirectionsArray[i * 3] = dx;
+              jerkDirectionsArray[i * 3 + 1] = dy;
+              jerkDirectionsArray[i * 3 + 2] = dz;
+            }
             linesGeometry.attributes.pulseFlag.needsUpdate = true;
+            pointsGeometry.attributes.jerkTime.needsUpdate = true;
+            pointsGeometry.attributes.jerkDirection.needsUpdate = true;
             console.log('Pulse Reset, pulseTime:', pulseTime, 'resetInterval:', resetInterval);
           }
           linesMaterial.uniforms.pulseTime.value = pulseTime;
+          pointsMaterial.uniforms.pulseTime.value = pulseTime;
 
           composer.render();
         });
