@@ -5,7 +5,6 @@ import {
   Points,
   ShaderMaterial,
   AdditiveBlending,
-  AxesHelper,
   Clock,
   Color,
   SphereGeometry,

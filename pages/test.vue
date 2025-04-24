@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { Color, Points, PointsMaterial, BufferGeometry, Float32BufferAttribute, ShaderMaterial } from 'three';
+import { Color, Points, ShaderMaterial, BufferGeometry, Float32BufferAttribute } from 'three';
 import type { IThreeContext } from '~/types/three';
+import pointVertex from '/public/textures/lines/pointVertex.glsl?raw';
+import pointFragment from '/public/textures/lines/pointFragment.glsl?raw';
 
 const threeContainerRef = ref();
 
-const createPoints = (): Points<BufferGeometry, PointsMaterial> => {
+const createPoints = (): Points<BufferGeometry, ShaderMaterial> => {
   const numPoints = 200;
 
   const vertices = [];
+  const initialPositions = [];
+  const noiseOffsets = [];
 
   for (let i = 0; i < numPoints; i++) {
     const x = (Math.random() - 0.5) * 40;
@@ -15,18 +19,29 @@ const createPoints = (): Points<BufferGeometry, PointsMaterial> => {
     const z = (Math.random() - 0.5) * 40;
 
     vertices.push(x, y, z);
+    initialPositions.push(x, y, z);
+    noiseOffsets.push(Math.random() * 100, Math.random() * 100, Math.random() * 100);
   }
 
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
-  const material = new PointsMaterial({ color: 0xffffff });
-  const points = new Points(geometry, material);
+  geometry.setAttribute('initialPositions', new Float32BufferAttribute(initialPositions, 3));
+  geometry.setAttribute('noiseOffsets', new Float32BufferAttribute(noiseOffsets, 3));
 
+  const material = new ShaderMaterial({
+    vertexShader: pointVertex,
+    fragmentShader: pointFragment,
+    uniforms: {
+      uTime: { value: 0 },
+    }
+  });
+
+  const points = new Points(geometry, material);
   return points;
 };
 
 const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) => {
-  let points: Points<BufferGeometry, PointsMaterial> | null = null;
+  let points: Points<BufferGeometry, ShaderMaterial> | null = null;
 
   const init = async () => {
     try {
@@ -40,6 +55,15 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
   };
 
   init();
+
+  if (threeContainerRef.value && threeContainerRef.value.onTick) {
+    threeContainerRef.value.onTick((elapsedTime: number) => {
+      if (points && points.material.uniforms) {
+        points.material.uniforms.uTime.value = elapsedTime;
+        points.position.y = Math.sin(elapsedTime) * 2;
+      }
+    });
+  }
 
   onBeforeUnmount(() => {
     if (points) {

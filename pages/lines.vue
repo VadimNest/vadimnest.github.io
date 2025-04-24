@@ -114,7 +114,7 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
         lineTValues.push(0.0, 1.0);
         linePulseFlags.push(0.0, 0.0);
         lineIndices.push(idx1, idx2);
-        adjacencyList[idx1].push(idx2); // Fixed typo: idxyf2 -> idx2
+        adjacencyList[idx1].push(idx2);
         adjacencyList[idx2].push(idx1);
       }
 
@@ -153,9 +153,6 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
         }
       }
 
-      console.log('Total number of lines:', lineIndices.length / 2);
-      console.log('Sample line lengths:', lineLengths.slice(0, 10));
-
       const updateDistancesAndAttributes = (sourceIndex: number) => {
         const distances: number[] = Array(numPoints).fill(Infinity);
         distances[sourceIndex] = 0;
@@ -174,9 +171,6 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
             }
           }
         }
-
-        console.log('Distances from source:', distances);
-        console.log('Number of unreachable points:', distances.filter((d) => d === Infinity).length);
 
         lineStartDistances.length = 0;
         lineEndDistances.length = 0;
@@ -197,9 +191,6 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
             lineTValues.push(1.0, 0.0);
           }
         }
-
-        console.log('Sample startDistances:', lineStartDistances.slice(0, 10));
-        console.log('Sample endDistances:', lineEndDistances.slice(0, 10));
 
         linesGeometry.setAttribute('startDistance', new THREE.Float32BufferAttribute(lineStartDistances, 1));
         linesGeometry.setAttribute('endDistance', new THREE.Float32BufferAttribute(lineEndDistances, 1));
@@ -429,29 +420,7 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
               if (jerkTimesArray[receivingPointIdx] < pulseTime - 0.2) {
                 jerkTimesArray[receivingPointIdx] = pulseTime;
                 jerkUpdateNeeded = true;
-                const jerkDirIdx = receivingPointIdx * 3;
-                const jerkMag = Math.sqrt(
-                  jerkDirectionsArray[jerkDirIdx] ** 2 +
-                    jerkDirectionsArray[jerkDirIdx + 1] ** 2 +
-                    jerkDirectionsArray[jerkDirIdx + 2] ** 2,
-                );
-                console.log(
-                  `Point ${receivingPointIdx} jerked: pulseTime=${pulseTime.toFixed(
-                    3,
-                  )}, line=${i}, startTime=${startTime.toFixed(3)}, endTime=${endTime.toFixed(
-                    3,
-                  )}, length=${lineLength.toFixed(3)}, duration=${pulseDuration.toFixed(
-                    3,
-                  )}, jerkDirectionMagnitude=${jerkMag.toFixed(3)}`,
-                );
               }
-              console.log(
-                `Line ${i} pulsed: startTime=${startTime.toFixed(3)}, endTime=${endTime.toFixed(
-                  3,
-                )}, length=${lineLength.toFixed(3)}, duration=${pulseDuration.toFixed(
-                  3,
-                )}, pulseTime=${pulseTime.toFixed(3)}`,
-              );
             }
           }
           linesGeometry.attributes.position.needsUpdate = true;
@@ -464,7 +433,6 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
           if (pulseTime > resetInterval) {
             pulseTime = 0.0;
             const newSourceIndex = Math.floor(Math.random() * numPoints);
-            console.log('New Source Index:', newSourceIndex);
             const result = updateDistancesAndAttributes(newSourceIndex);
             distances = result.distances;
             maxDistance = result.maxDistance;
@@ -487,7 +455,6 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
             linesGeometry.attributes.pulseFlag.needsUpdate = true;
             pointsGeometry.attributes.jerkTime.needsUpdate = true;
             pointsGeometry.attributes.jerkDirection.needsUpdate = true;
-            console.log('Pulse Reset, pulseTime:', pulseTime, 'resetInterval:', resetInterval);
           }
           linesMaterial.uniforms.pulseTime.value = pulseTime;
           pointsMaterial.uniforms.pulseTime.value = pulseTime;
