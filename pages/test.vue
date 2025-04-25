@@ -12,6 +12,8 @@ const createPoints = (): Points<BufferGeometry, ShaderMaterial> => {
   const vertices = [];
   const initialPositions = [];
   const noiseOffsets = [];
+  const jerkTimes = [];
+  const jerkDirections = [];
 
   for (let i = 0; i < numPoints; i++) {
     const x = (Math.random() - 0.5) * 40;
@@ -21,18 +23,29 @@ const createPoints = (): Points<BufferGeometry, ShaderMaterial> => {
     vertices.push(x, y, z);
     initialPositions.push(x, y, z);
     noiseOffsets.push(Math.random() * 100, Math.random() * 100, Math.random() * 100);
+    jerkTimes.push(-1.0);
+
+    const theta = Math.random() * 2 * Math.PI;
+    const phi = Math.acos(2 * Math.random() - 1);
+    const dx = Math.sin(phi) * Math.cos(theta);
+    const dy = Math.sin(phi) * Math.sin(theta);
+    const dz = Math.cos(phi);
+    jerkDirections.push(dx, dy, dz);
   }
 
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
   geometry.setAttribute('initialPositions', new Float32BufferAttribute(initialPositions, 3));
   geometry.setAttribute('noiseOffsets', new Float32BufferAttribute(noiseOffsets, 3));
+  geometry.setAttribute('jerkTime', new Float32BufferAttribute(jerkTimes, 1));
+  geometry.setAttribute('jerkDirection', new Float32BufferAttribute(jerkDirections, 3));
 
   const material = new ShaderMaterial({
     vertexShader: pointVertex,
     fragmentShader: pointFragment,
     uniforms: {
       uTime: { value: 0 },
+      uPulseTime: { value: -1.0 },
     }
   });
 
@@ -60,7 +73,40 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
     threeContainerRef.value.onTick((elapsedTime: number) => {
       if (points && points.material.uniforms) {
         points.material.uniforms.uTime.value = elapsedTime;
-        points.position.y = Math.sin(elapsedTime) * 2;
+
+        if (Math.floor(elapsedTime) % 4 === 0 && elapsedTime - Math.floor(elapsedTime) < 0.1) {
+          points.material.uniforms.uPulseTime.value = elapsedTime;
+        }
+
+        const pulseTime = points.material.uniforms.uPulseTime.value;
+        if (pulseTime >= 0) {
+          const jerkTimeAttr = points.geometry.attributes.jerkTime;
+          const positions = points.geometry.attributes.initialPositions.array;
+          const pulseSpeed = 10.0; // Импульс проходит 10 единиц в секунду.
+          const pulseDelay = 0.1; // добавляет задержку в 0,1 секунды для более плавности
+          const jerkDuration = 0.5;
+
+          for (let i = 0; i < jerkTimeAttr.count; i++) {
+            // Reset jerkTime if jerk is complete
+            if (jerkTimeAttr.array[i] >= 0 && elapsedTime > jerkTimeAttr.array[i] + jerkDuration) {
+              jerkTimeAttr.array[i] = -1.0;
+            }
+
+            // Trigger new jerk if pulse reaches point
+            if (jerkTimeAttr.array[i] < 0) {
+            const x = positions[i * 3];
+            const y = positions[i * 3 + 1];
+            const z = positions[i * 3 + 2];
+            const distance = Math.sqrt(x * x + y * y + z * z);
+            const triggerTime = pulseTime + distance / pulseSpeed + pulseDelay;
+
+            if (elapsedTime >= triggerTime) {
+              jerkTimeAttr.array[i] = elapsedTime;
+            }
+          }
+          }
+          jerkTimeAttr.needsUpdate = true;
+        }
       }
     });
   }
