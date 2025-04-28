@@ -12,8 +12,9 @@ const createPoints = (): Points<BufferGeometry, ShaderMaterial> => {
   const vertices = [];
   const initialPositions = [];
   const noiseOffsets = [];
-  const jerkTimes = [];
   const jerkDirections = [];
+  const jerkTimes = new Array(numPoints).fill(-1.0);
+  const cycleIds = new Array(numPoints).fill(-1);
 
   for (let i = 0; i < numPoints; i++) {
     const x = (Math.random() - 0.5) * 40;
@@ -23,7 +24,6 @@ const createPoints = (): Points<BufferGeometry, ShaderMaterial> => {
     vertices.push(x, y, z);
     initialPositions.push(x, y, z);
     noiseOffsets.push(Math.random() * 100, Math.random() * 100, Math.random() * 100);
-    jerkTimes.push(-1.0);
 
     const theta = Math.random() * 2 * Math.PI;
     const phi = Math.acos(2 * Math.random() - 1);
@@ -39,6 +39,7 @@ const createPoints = (): Points<BufferGeometry, ShaderMaterial> => {
   geometry.setAttribute('noiseOffsets', new Float32BufferAttribute(noiseOffsets, 3));
   geometry.setAttribute('jerkTime', new Float32BufferAttribute(jerkTimes, 1));
   geometry.setAttribute('jerkDirection', new Float32BufferAttribute(jerkDirections, 3));
+  geometry.setAttribute('cycleId', new Float32BufferAttribute(cycleIds, 1));
 
   const material = new ShaderMaterial({
     vertexShader: pointVertex,
@@ -46,7 +47,8 @@ const createPoints = (): Points<BufferGeometry, ShaderMaterial> => {
     uniforms: {
       uTime: { value: 0 },
       uPulseTime: { value: -1.0 },
-    }
+      uPulseOrigin: { value: [0, 0, 0] },
+    },
   });
 
   const points = new Points(geometry, material);
@@ -55,6 +57,7 @@ const createPoints = (): Points<BufferGeometry, ShaderMaterial> => {
 
 const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) => {
   let points: Points<BufferGeometry, ShaderMaterial> | null = null;
+  let currentCycleId = 0;
 
   const init = async () => {
     try {
@@ -73,19 +76,36 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
     threeContainerRef.value.onTick((elapsedTime: number) => {
       if (points && points.material.uniforms) {
         points.material.uniforms.uTime.value = elapsedTime;
+        const cycleIdAttr = points.geometry.attributes.cycleId;
 
         if (Math.floor(elapsedTime) % 4 === 0 && elapsedTime - Math.floor(elapsedTime) < 0.1) {
           points.material.uniforms.uPulseTime.value = elapsedTime;
+          points.material.uniforms.uPulseOrigin.value = [
+            (Math.random() - 0.5) * 40,
+            (Math.random() - 0.5) * 40,
+            (Math.random() - 0.5) * 40,
+          ];
+
+          currentCycleId++;
+
+          for (let i = 0; i < cycleIdAttr.count; i++) {
+            cycleIdAttr.array[i] = -1;
+          }
+          cycleIdAttr.needsUpdate = true;
         }
 
+
         const pulseTime = points.material.uniforms.uPulseTime.value;
+        const pulseOrigin = points.material.uniforms.uPulseOrigin.value;
+
         if (pulseTime >= 0) {
           const jerkTimeAttr = points.geometry.attributes.jerkTime;
           const positions = points.geometry.attributes.initialPositions.array;
-          const pulseSpeed = 10.0; // Импульс проходит 10 единиц в секунду.
+          const pulseSpeed = 20.0; // Импульс проходит 10 единиц в секунду.
           const pulseDelay = 0.1; // добавляет задержку в 0,1 секунды для более плавности
           const jerkDuration = 0.5;
 
+          let cycleIdUpdated = false;
           for (let i = 0; i < jerkTimeAttr.count; i++) {
             // Reset jerkTime if jerk is complete
             if (jerkTimeAttr.array[i] >= 0 && elapsedTime > jerkTimeAttr.array[i] + jerkDuration) {
@@ -93,17 +113,27 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
             }
 
             // Trigger new jerk if pulse reaches point
-            if (jerkTimeAttr.array[i] < 0) {
-            const x = positions[i * 3];
-            const y = positions[i * 3 + 1];
-            const z = positions[i * 3 + 2];
-            const distance = Math.sqrt(x * x + y * y + z * z);
-            const triggerTime = pulseTime + distance / pulseSpeed + pulseDelay;
+            if (jerkTimeAttr.array[i] < 0 && cycleIdAttr.array[i] !== currentCycleId) {
+              const x = positions[i * 3];
+              const y = positions[i * 3 + 1];
+              const z = positions[i * 3 + 2];
 
-            if (elapsedTime >= triggerTime) {
-              jerkTimeAttr.array[i] = elapsedTime;
+              const dx = x - pulseOrigin[0];
+              const dy = y - pulseOrigin[1];
+              const dz = z - pulseOrigin[2];
+
+              const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              const triggerTime = pulseTime + distance / pulseSpeed + pulseDelay;
+
+              if (elapsedTime >= triggerTime) {
+                jerkTimeAttr.array[i] = elapsedTime;
+                cycleIdAttr.array[i] = currentCycleId;
+                cycleIdUpdated = true;
+              }
             }
           }
+          if (cycleIdUpdated) {
+            cycleIdAttr.needsUpdate = true;
           }
           jerkTimeAttr.needsUpdate = true;
         }
