@@ -14,7 +14,7 @@ void main() {
 
   float jerkDuration = 0.5; // рывок длится 0,5 секунды.
   float timeSinceJerk = uTime - jerkTime; // Время с начала рывка.
-  float jerkFactor = max(0.0, 1.0 - timeSinceJerk / jerkDuration);  // масштабируется от 1.0 до 0.0 за 0.5с
+  float jerkFactor = max(0.8, 1.0 - timeSinceJerk / jerkDuration);  // масштабируется от 1.0 до 0.0 за 0.5с
   jerkFactor = pow(jerkFactor, 3.0);
   jerkFactor *= smoothstep(0.0, 0.1, timeSinceJerk); // Fade in over 0.1s
 
