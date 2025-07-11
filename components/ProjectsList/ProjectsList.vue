@@ -40,6 +40,10 @@ const projects = [
     name: '10 - Нейронка',
     component: 'lines',
   },
+  {
+    name: '11 - Yandex music эквалайзер',
+    component: 'music',
+  },
 ];
 </script>
 
