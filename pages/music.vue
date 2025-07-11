@@ -123,13 +123,14 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
 
     try {
       scene.background = new Color(0x0);
+
       const params = {
-        red: 0.45,
-        green: 1.0,
+        red: 1.0,
+        green: 0.5,
         blue: 1.0,
-        threshold: 0.5,
-        strength: 0.5,
-        radius: 0.8,
+        threshold: 0.336,
+        strength: 0.714,
+        radius: 1.0,
       };
 
       renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -177,12 +178,13 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
       const uniforms = {
         u_time: { type: 'f', value: 0.0 },
         u_frequency: { type: 'f', value: 0.0 },
-        u_red: { type: 'f', value: 0.45 },
-        u_green: { type: 'f', value: 1.0 },
+        u_red: { type: 'f', value: 1.0 },
+        u_green: { type: 'f', value: 0.5 },
         u_blue: { type: 'f', value: 1.0 },
       };
 
       const geo = new THREE.IcosahedronGeometry(4, 30);
+      // const geo = new THREE.PlaneGeometry(10, 10, 100, 100);
       const mat = new THREE.ShaderMaterial({
         uniforms: uniforms,
         vertexShader: vertexShader,
@@ -198,7 +200,7 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
       const sound = new THREE.Audio(listener);
 
       const audioLoader = new THREE.AudioLoader();
-      audioLoader.load('./media/medlyak.mp3', function (buffer) {
+      audioLoader.load('./media/only-time.mp3', function (buffer) {
         sound.setBuffer(buffer);
         window.addEventListener('click', function () {
           sound.play();
@@ -231,12 +233,13 @@ const handleSceneReady = ({ scene, camera, renderer, controls }: IThreeContext) 
 </script>
 
 <template>
-  <nuxt-link class="go-back go-back_black" to="/">⭠ на главную</nuxt-link>
+  <nuxt-link class="go-back" to="/">⭠ на главную</nuxt-link>
   <ThreeContainer
     ref="threeContainerRef"
-    :camera-position="[0, 0, 40]"
+    :camera-position="[0, 0, 20]"
     :far="150"
     custom-animation
+    disable-default-render
     @scene-ready="handleSceneReady"
   />
 </template>

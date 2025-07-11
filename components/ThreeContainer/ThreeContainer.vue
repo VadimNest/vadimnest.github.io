@@ -15,6 +15,7 @@ const {
   enableDamping = true,
   customAnimation = false,
   alpha = false,
+  disableDefaultRender = false,
 } = defineProps<{
   clearColor?: string | number;
   fov?: number;
@@ -24,6 +25,7 @@ const {
   enableDamping?: boolean;
   customAnimation?: boolean;
   alpha?: boolean;
+  disableDefaultRender?: boolean;
 }>();
 const threeContainer = ref<HTMLDivElement>();
 const threeCanvas = ref<HTMLCanvasElement>();
@@ -63,8 +65,11 @@ const animate = () => {
     tickCallback.value(elapsedTime);
   }
 
+  if (!disableDefaultRender) {
+    renderer.render(scene, camera);
+  }
+
   controls.update();
-  renderer.render(scene, camera);
   requestAnimationFrame(animate);
 };
 
