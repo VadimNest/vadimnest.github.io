@@ -126,7 +126,7 @@ const setupBloom = (
 };
 
 const setupGUI = (
-  params: { red: number; green: number; blue: number; threshold: number; strength: number; radius: number },
+  params: { red: number; green: number; blue: number; threshold: number; strength: number; radius: number; radiusMultiplier: number; strengthMultiplier: number },
   uniforms: any,
   bloomPass: UnrealBloomPass
 ) => {
@@ -146,11 +146,11 @@ const setupGUI = (
   bloomFolder.add(params, 'threshold', 0, 1).onChange((value: number) => {
     bloomPass.threshold = Number(value);
   });
-  bloomFolder.add(params, 'strength', 0, 3).onChange((value: number) => {
-    bloomPass.strength = Number(value);
+  bloomFolder.add(params, 'radiusMultiplier', 0, 2).onChange((value: number) => {
+    params.radiusMultiplier = Number(value);
   });
-  bloomFolder.add(params, 'radius', 0, 1).onChange((value: number) => {
-    bloomPass.radius = Number(value);
+  bloomFolder.add(params, 'strengthMultiplier', 0, 3).onChange((value: number) => {
+    params.strengthMultiplier = Number(value);
   });
 
   return gui;
@@ -158,6 +158,7 @@ const setupGUI = (
 
 const setupMesh = (scene: THREE.Scene, uniforms: any) => {
   const geo = new THREE.IcosahedronGeometry(4, 30);
+  // const geo = new THREE.PlaneGeometry(20, 20, 100, 100);
   const mat = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: getVertexShader(),
@@ -184,19 +185,23 @@ const handleSceneReady = ({ scene, camera, renderer }: IThreeContext) => {
   const init = async () => {
     try {
       const params = {
-        red: 1.0,
-        green: 0.5,
+        red: 0.226,
+        green: 0.484,
         blue: 1.0,
         threshold: 0.336,
         strength: 0.714,
         radius: 1.0,
+        radiusMultiplier: 1.0,
+        strengthMultiplier: 1.5,
       };
 
       const uniforms = {
         u_time: { type: 'f', value: 0.0 },
         u_frequency: { type: 'f', value: 0.0 },
-        u_red: { type: 'f', value: 1.0 },
-        u_green: { type: 'f', value: 0.5 },
+        // pink 1.0 0.5 1
+        // blue 0.226 0.484 1
+        u_red: { type: 'f', value: 0.226 },
+        u_green: { type: 'f', value: 0.484 },
         u_blue: { type: 'f', value: 1.0 },
       };
 
@@ -210,6 +215,8 @@ const handleSceneReady = ({ scene, camera, renderer }: IThreeContext) => {
         threeContainerRef.value.onTick((elapsedTime: number) => {
           uniforms.u_time.value = elapsedTime;
           uniforms.u_frequency.value = analyser.getAverageFrequency();
+          bloomPass.radius = (analyser.getAverageFrequency() / 255.0) * params.radiusMultiplier;
+          bloomPass.strength = (analyser.getAverageFrequency() / 255.0) * params.strengthMultiplier;
           bloomComposer.render();
         });
       }
