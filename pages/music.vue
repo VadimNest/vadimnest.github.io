@@ -174,7 +174,10 @@ const setupAudio = (camera: THREE.PerspectiveCamera) => {
   camera.add(listener);
   const sound = new THREE.Audio(listener);
   const audioLoader = new THREE.AudioLoader();
-  audioLoader.load('./media/only-time.mp3', (buffer) => {
+  // audioLoader.load('./media/kipelov.mp3', (buffer) => {
+  // audioLoader.load('./media/only-time.mp3', (buffer) => {
+  // audioLoader.load('./media/tequila.mp3', (buffer) => {
+  audioLoader.load('./media/moscow-never-sleeps.mp3', (buffer) => {
     sound.setBuffer(buffer);
     window.addEventListener('click', () => sound.play());
   });
